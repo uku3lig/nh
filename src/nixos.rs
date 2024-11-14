@@ -6,9 +6,9 @@ use color_eyre::Result;
 
 use tracing::{debug, info, warn};
 
-use crate::interface::NHRunnable;
-use crate::interface::OsRebuildType::{self, Boot, Build, Switch, Test};
+use crate::interface::OsSubcommand::{self, Boot, Build, Switch, Test};
 use crate::interface::{self, OsRebuildArgs};
+use crate::interface::{NHRunnable, ReplArgs};
 use crate::util::{compare_semver, get_nix_version};
 use crate::*;
 
@@ -21,13 +21,20 @@ impl NHRunnable for interface::OsArgs {
     fn run(&self) -> Result<()> {
         match &self.action {
             Switch(args) | Boot(args) | Test(args) | Build(args) => args.rebuild(&self.action),
+            OsSubcommand::Repl(args) => repl(args),
             s => bail!("Subcommand {:?} not yet implemented", s),
         }
     }
 }
 
+fn repl(args: &ReplArgs) -> Result<()> {
+    debug!(?args);
+
+    Ok(())
+}
+
 impl OsRebuildArgs {
-    pub fn rebuild(&self, rebuild_type: &OsRebuildType) -> Result<()> {
+    pub fn rebuild(&self, rebuild_type: &OsSubcommand) -> Result<()> {
         let use_sudo = if self.bypass_root_check {
             warn!("Bypassing root check, now running nix as root");
             false
@@ -125,7 +132,7 @@ impl OsRebuildArgs {
             .build()?
             .exec()?;
 
-        if self.common.dry || matches!(rebuild_type, OsRebuildType::Build(_)) {
+        if self.common.dry || matches!(rebuild_type, OsSubcommand::Build(_)) {
             return Ok(());
         }
 

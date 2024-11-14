@@ -81,11 +81,11 @@ pub enum NHCommand {
 /// Reimplementations of nixos-rebuild
 pub struct OsArgs {
     #[command(subcommand)]
-    pub action: OsRebuildType,
+    pub action: OsSubcommand,
 }
 
 #[derive(Debug, Subcommand)]
-pub enum OsRebuildType {
+pub enum OsSubcommand {
     /// Build and activate the new configuration, and make it the boot default
     Switch(OsRebuildArgs),
     /// Build the new configuration and make it the boot default
@@ -97,7 +97,14 @@ pub enum OsRebuildType {
     /// Show an overview of the system's info
     #[command(hide = true)]
     Info,
+
+    /// Load configuration into a repl
+    #[command(hide = true)]
+    Repl(ReplArgs),
 }
+
+#[derive(Debug, Args)]
+pub struct ReplArgs {}
 
 #[derive(Debug, Args)]
 pub struct OsRebuildArgs {
@@ -160,7 +167,7 @@ pub struct CommonRebuildArgs {
 
     /// Path to save the result link. Defaults to using a temporary directory.
     #[arg(long, short)]
-    pub out_link: Option<PathBuf>
+    pub out_link: Option<PathBuf>,
 }
 
 #[derive(Args, Debug)]
