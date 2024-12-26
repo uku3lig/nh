@@ -63,27 +63,7 @@ impl Command {
 
     pub fn run(&self) -> Result<()> {
         let cmd = if self.elevate {
-            let cmd = if cfg!(target_os = "macos") {
-                // Check for if sudo has the preserve-env flag
-                Exec::cmd("sudo").args(
-                    if Exec::cmd("sudo")
-                        .args(&["--help"])
-                        .stderr(Redirection::None)
-                        .stdout(Redirection::Pipe)
-                        .capture()?
-                        .stdout_str()
-                        .contains("--preserve-env")
-                    {
-                        &["--set-home", "--preserve-env=PATH", "env"]
-                    } else {
-                        &["--set-home"]
-                    },
-                )
-            } else {
-                Exec::cmd("sudo")
-            };
-
-            cmd.arg(&self.command).args(&self.args)
+            sudo(&self.command).args(&self.args)
         } else {
             Exec::cmd(&self.command).args(&self.args)
         }
@@ -178,22 +158,16 @@ impl Build {
 
         let installable_args = self.installable.to_args();
 
-        let exit = if self.nom {
-            let cmd = {
-                Exec::cmd("nix")
-                    .arg("build")
-                    .args(&installable_args)
-                    .args(&["--log-format", "internal-json", "--verbose"])
-                    .args(&self.extra_args)
-                    .stdout(Redirection::Pipe)
-                    .stderr(Redirection::Merge)
-                    | Exec::cmd("nom").args(&["--json"])
+        let cmd = if self.nom { "nom" } else { "nix" };
+        let cmd = match self.installable {
+            Installable::Flake { ref reference, .. } if reference.starts_with("/nix/store") => {
+                sudo(cmd)
             }
-            .stdout(Redirection::None);
-            debug!(?cmd);
-            cmd.join()
-        } else {
-            let cmd = Exec::cmd("nix")
+            _ => Exec::cmd(cmd),
+        };
+
+        let exit = {
+            let cmd = cmd
                 .arg("build")
                 .args(&installable_args)
                 .args(&self.extra_args)
@@ -216,3 +190,28 @@ impl Build {
 #[derive(Debug, Error)]
 #[error("Command exited with status {0:?}")]
 pub struct ExitError(ExitStatus);
+
+pub fn sudo(command: impl AsRef<OsStr>) -> Exec {
+    let cmd = if cfg!(target_os = "macos") {
+        // Check for if sudo has the preserve-env flag
+        Exec::cmd("sudo").args(
+            if Exec::cmd("sudo")
+                .args(&["--help"])
+                .stderr(Redirection::None)
+                .stdout(Redirection::Pipe)
+                .capture()
+                .ok()
+                .filter(|c| c.stdout_str().contains("--preserve-env"))
+                .is_some()
+            {
+                &["--set-home", "--preserve-env=PATH", "env"]
+            } else {
+                &["--set-home"]
+            },
+        )
+    } else {
+        Exec::cmd("sudo")
+    };
+
+    cmd.arg(command)
+}
